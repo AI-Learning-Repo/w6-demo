@@ -97,11 +97,21 @@ Provided below is the available burger menu and it's related price:
     SUPPORTED_CONTENT_TYPES = ["text", "text/plain"]
 
     def invoke(self, query, sessionId) -> str:
-        model = LLM(
+        model = (
+    
+    LLM(
+        model="groq/" + os.environ["SELLER_MODEL"],
+        api_key=os.environ["GROQ_API_KEY"],
+        temperature=0.0,
+    )
+    
+    if os.getenv("SELLER_PROVIDER", "gemini").lower() == "groq"
+    else LLM(
             model="gemini/" + os.environ["SELLER_MODEL"],
             api_key=os.environ["GEMINI_API_KEY"],
             temperature=0.0,  # Use base model name without provider prefix
         )
+)
         burger_agent = Agent(
             role="Burger Seller Agent",
             goal=(

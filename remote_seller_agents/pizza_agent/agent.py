@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
@@ -95,12 +96,23 @@ Provided below is the available pizza menu and it's related price:
     SUPPORTED_CONTENT_TYPES = ["text", "text/plain"]
 
     def __init__(self):
-        self.model = ChatGoogleGenerativeAI(
+        self.model = (
+    
+    ChatGroq(
+        model=os.environ["SELLER_MODEL"],
+        api_key=os.environ["GROQ_API_KEY"],
+        temperature=0.0,
+        max_retries=2,
+    )
+    
+    if os.getenv("SELLER_PROVIDER", "gemini").lower() == "groq"
+    else ChatGoogleGenerativeAI(
             model=os.environ["SELLER_MODEL"],
             google_api_key=os.environ["GOOGLE_API_KEY"],
             vertexai=False,
             temperature=0.0,
         )
+)
         self.tools = [create_pizza_order]
         self.graph = create_react_agent(
             self.model,
