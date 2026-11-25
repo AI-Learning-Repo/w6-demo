@@ -1,37 +1,30 @@
-"""
-Copyright 2025 Google LLC
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+import asyncio
+import inspect
+import logging
 
-    https://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-"""
-
-from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.events import EventQueue
-from a2a.types import (
-    Part,
-    Task,
-    TextPart,
-    UnsupportedOperationError,
-)
-from a2a.utils import (
-    completed_task,
-    new_artifact,
-)
-from a2a.utils.errors import ServerError
 from agent import PizzaSellerAgent
 
+from a2a.helpers import (
+    get_message_text,
+    new_task_from_user_message,
+    new_text_part,
+)
 
-class PizzaSellerAgentExecutor(AgentExecutor):
-    """Pizza Seller AgentExecutor."""
+from a2a.server.agent_execution import (
+    AgentExecutor,
+    RequestContext,
+)
+
+from a2a.server.events import EventQueue
+from a2a.server.tasks import TaskUpdater
+from a2a.types import TaskState
+
+
+logger = logging.getLogger(__name__)
+
+
+class PizzaAgentExecutor(AgentExecutor):
 
     def __init__(self):
         self.agent = PizzaSellerAgent()
@@ -41,25 +34,91 @@ class PizzaSellerAgentExecutor(AgentExecutor):
         context: RequestContext,
         event_queue: EventQueue,
     ) -> None:
-        query = context.get_user_input()
-        try:
-            result = self.agent.invoke(query, context.context_id)
-            print(f"Final Result ===> {result}")
 
-            parts = [Part(root=TextPart(text=str(result)))]
-            await event_queue.enqueue_event(
-                completed_task(
-                    context.task_id,
-                    context.context_id,
-                    [new_artifact(parts, f"pizza_{context.task_id}")],
-                    [context.message],
+        # 1. Extract the incoming message
+        message = context.message
+
+        if message is None:
+            raise ValueError("Missing user message")
+
+        query = get_message_text(message)
+
+        # 2. Create or retrieve the A2A task
+        task = (
+            context.current_task
+            or new_task_from_user_message(message)
+        )
+
+        await event_queue.enqueue_event(task)
+
+        # 3. Create a task updater
+        updater = TaskUpdater(
+            event_queue=event_queue,
+            task_id=task.id,
+            context_id=task.context_id,
+        )
+
+        await updater.update_status(
+            state=TaskState.TASK_STATE_WORKING
+        )
+
+        try:
+
+            if not query.strip():
+                raise ValueError("Empty text request")
+
+            # 4. Execute the underlying agent safely
+            if inspect.iscoroutinefunction(self.agent.invoke):
+                result = await self.agent.invoke(
+                    query,
+                    task.context_id,
                 )
+            else:
+                result = await asyncio.to_thread(
+                    self.agent.invoke,
+                    query,
+                    task.context_id,
+                )
+
+            # 5. Publish the agent response
+            await updater.add_artifact(
+                parts=[
+                    new_text_part(
+                        text=str(result),
+                        media_type="text/plain",
+                    )
+                ],
+                name="pizza_response",
             )
-        except Exception as e:
-            print("Error invoking agent: %s", e)
-            raise ServerError(error=ValueError(f"Error invoking agent: {e}")) from e
+
+            # 6. Mark task as completed
+            await updater.complete()
+
+        except Exception:
+
+            logger.exception("Pizza agent execution failed")
+
+            await updater.add_artifact(
+                parts=[
+                    new_text_part(
+                        text="Seller execution failed. "
+                             "Check the server logs.",
+                        media_type="text/plain",
+                    )
+                ],
+                name="error",
+            )
+
+            await updater.update_status(
+                state=TaskState.TASK_STATE_FAILED
+            )
 
     async def cancel(
-        self, request: RequestContext, event_queue: EventQueue
-    ) -> Task | None:
-        raise ServerError(error=UnsupportedOperationError())
+        self,
+        context: RequestContext,
+        event_queue: EventQueue,
+    ) -> None:
+
+        raise NotImplementedError(
+            "Task cancellation is not supported."
+        )

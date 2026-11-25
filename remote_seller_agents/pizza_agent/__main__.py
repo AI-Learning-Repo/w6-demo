@@ -1,82 +1,133 @@
-"""
-Copyright 2025 Google LLC
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    https://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-"""
-
-from a2a.types import AgentCapabilities, AgentSkill, AgentCard
-from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.apps import A2AStarletteApplication
-from a2a.server.tasks import InMemoryTaskStore
-from agent import PizzaSellerAgent
-from agent_executor import PizzaSellerAgentExecutor
-import uvicorn
-from dotenv import load_dotenv
-import logging
+import argparse
 import os
-import click
+import logging
 
-load_dotenv()
+import uvicorn
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from starlette.applications import Starlette
+
+from a2a.types import (
+    AgentCard,
+    AgentCapabilities,
+    AgentInterface,
+    AgentSkill,
+)
+
+from a2a.server.request_handlers import (
+    DefaultRequestHandler,
+)
+
+from a2a.server.tasks import InMemoryTaskStore
+
+from a2a.server.routes import (
+    create_agent_card_routes,
+    create_jsonrpc_routes,
+)
+
+from agent_executor import PizzaAgentExecutor
 
 
-@click.command()
-@click.option("--host", "host", default="0.0.0.0")
-@click.option("--port", "port", default=10000)
-def main(host, port):
-    """Entry point for the A2A + CrewAI Burger Seller Agent."""
-    try:
-        capabilities = AgentCapabilities(streaming=True)
-        skill = AgentSkill(
-            id="create_pizza_order",
-            name="Pizza Order Creation Tool",
-            description="Helps with creating pizza orders",
-            tags=["pizza order creation"],
-            examples=["I want to order 2 pepperoni pizzas"],
+def main():
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1"
+    )
+
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=11000
+    )
+
+    args = parser.parse_args()
+
+    public_url = os.getenv(
+        "HOST_OVERRIDE",
+        f"http://{args.host}:{args.port}/"
+    )
+
+    # 1. Advertise the agent's skill
+    skill = AgentSkill(
+        id="create_pizza_order",
+        name="Pizza Order Creation Tool",
+        description=(
+            "Provides pizza menu information, "
+            "prices and simulated pizza orders."
+        ),
+        tags=["pizza", "food", "ordering"],
+        examples=[
+            "What is the price of a Margherita Pizza?",
+            "I want to order two Margherita Pizzas.",
+        ],
+        input_modes=["text/plain"],
+        output_modes=["text/plain"],
+    )
+
+    # 2. Define the A2A v1 Agent Card
+    agent_card = AgentCard(
+        name="pizza_seller_agent",
+        description=(
+            "Helps with pizza menu information "
+            "and simulated orders."
+        ),
+        version="2.0.0",
+
+        supported_interfaces=[
+            AgentInterface(
+                protocol_binding="JSONRPC",
+                protocol_version="1.0",
+                url=public_url,
+            )
+        ],
+
+        capabilities=AgentCapabilities(
+            streaming=False
+        ),
+
+        default_input_modes=["text/plain"],
+        default_output_modes=["text/plain"],
+
+        skills=[skill],
+    )
+
+    # 3. Connect the executor to A2A
+    request_handler = DefaultRequestHandler(
+        agent_executor=PizzaAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=agent_card,
+    )
+
+    # 4. Create HTTP routes
+    routes = []
+
+    routes.extend(
+        create_agent_card_routes(agent_card)
+    )
+
+    routes.extend(
+        create_jsonrpc_routes(
+            request_handler,
+            "/"
         )
-        agent_host_url = (
-            os.getenv("HOST_OVERRIDE")
-            if os.getenv("HOST_OVERRIDE")
-            else f"http://{host}:{port}/"
-        )
-        agent_card = AgentCard(
-            name="pizza_seller_agent",
-            description="Helps with creating pizza orders",
-            url=agent_host_url,
-            version="1.0.0",
-            defaultInputModes=PizzaSellerAgent.SUPPORTED_CONTENT_TYPES,
-            defaultOutputModes=PizzaSellerAgent.SUPPORTED_CONTENT_TYPES,
-            capabilities=capabilities,
-            skills=[skill],
-        )
+    )
 
-        request_handler = DefaultRequestHandler(
-            agent_executor=PizzaSellerAgentExecutor(),
-            task_store=InMemoryTaskStore(),
-        )
-        server = A2AStarletteApplication(
-            agent_card=agent_card, http_handler=request_handler
-        )
+    # 5. Create the ASGI application
+    app = Starlette(routes=routes)
 
-        uvicorn.run(server.build(), host=host, port=port)
-
-        logger.info(f"Starting server on {host}:{port}")
-    except Exception as e:
-        logger.error(f"An error occurred during server startup: {e}")
-        exit(1)
+    # 6. Start the HTTP server
+    uvicorn.run(
+        app,
+        host=args.host,
+        port=args.port
+    )
 
 
 if __name__ == "__main__":
+
+    logging.basicConfig(level=logging.INFO)
+
     main()

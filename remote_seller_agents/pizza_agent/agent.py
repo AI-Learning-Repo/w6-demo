@@ -31,7 +31,7 @@ memory = MemorySaver()
 class OrderItem(BaseModel):
     name: str
     quantity: int
-    price: int
+    price: float
 
 
 class Order(BaseModel):
@@ -74,12 +74,14 @@ Do not attempt to answer unrelated questions or use tools for other purposes.
 
 # CONTEXT
 
+All prices are in euros (EUR). Express monetary amounts using the euro symbol and two decimal places, for example €8.50. The price field in order tools represents the unit price in euros, not cents. Calculate totals using quantities and unit prices. Do not convert prices to other currencies.
+
 Provided below is the available pizza menu and it's related price:
-- Margherita Pizza: IDR 100K
-- Pepperoni Pizza: IDR 140K
-- Hawaiian Pizza: IDR 110K
-- Veggie Pizza: IDR 100K
-- BBQ Chicken Pizza: IDR 130K
+- Margherita Pizza: EUR 10.00
+- Pepperoni Pizza: EUR 14.00
+- Hawaiian Pizza: EUR 11.00
+- Veggie Pizza: EUR 10.00
+- BBQ Chicken Pizza: EUR 13.00
 
 # RULES
 

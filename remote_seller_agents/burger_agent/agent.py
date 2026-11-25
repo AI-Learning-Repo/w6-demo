@@ -28,7 +28,7 @@ load_dotenv()
 class OrderItem(BaseModel):
     name: str
     quantity: int
-    price: int
+    price: float
 
 
 class Order(BaseModel):
@@ -74,11 +74,13 @@ Do not attempt to answer unrelated questions or use tools for other purposes.
 Received user query: {user_prompt}
 Session ID: {session_id}
 
+All prices are in euros (EUR). Express monetary amounts using the euro symbol and two decimal places, for example €8.50. The price field in order tools represents the unit price in euros, not cents. Calculate totals using quantities and unit prices. Do not convert prices to other currencies.
+
 Provided below is the available burger menu and it's related price:
-- Classic Cheeseburger: IDR 85K
-- Double Cheeseburger: IDR 110K
-- Spicy Chicken Burger: IDR 80K
-- Spicy Cajun Burger: IDR 85K
+- Classic Cheeseburger: EUR 8.50
+- Double Cheeseburger: EUR 11.00
+- Spicy Chicken Burger: EUR 8.00
+- Spicy Cajun Burger: EUR 8.50
 
 # RULES
 
