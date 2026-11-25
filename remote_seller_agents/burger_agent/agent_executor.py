@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
+
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.types import (
@@ -43,7 +45,11 @@ class BurgerSellerAgentExecutor(AgentExecutor):
     ) -> None:
         query = context.get_user_input()
         try:
-            result = self.agent.invoke(query, context.context_id)
+            result = await asyncio.to_thread(
+                self.agent.invoke,
+                query,
+                context.context_id
+            )
             print(f"Final Result ===> {result}")
 
             parts = [Part(root=TextPart(text=str(result)))]

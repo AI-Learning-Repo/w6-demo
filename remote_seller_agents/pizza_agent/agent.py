@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from langchain_google_vertexai import ChatVertexAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
@@ -93,10 +93,11 @@ Provided below is the available pizza menu and it's related price:
     SUPPORTED_CONTENT_TYPES = ["text", "text/plain"]
 
     def __init__(self):
-        self.model = ChatVertexAI(
-            model="gemini-2.5-flash-lite",
-            location=os.getenv("GOOGLE_CLOUD_LOCATION"),
-            project=os.getenv("GOOGLE_CLOUD_PROJECT"),
+        self.model = ChatGoogleGenerativeAI(
+            model=os.environ["SELLER_MODEL"],
+            google_api_key=os.environ["GOOGLE_API_KEY"],
+            vertexai=False,
+            temperature=0.0,
         )
         self.tools = [create_pizza_order]
         self.graph = create_react_agent(
@@ -113,4 +114,4 @@ Provided below is the available pizza menu and it's related price:
 
     def get_agent_response(self, config):
         current_state = self.graph.get_state(config)
-        return current_state.values["messages"][-1].content
+        return current_state.values["messages"][-1].text
